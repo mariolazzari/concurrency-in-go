@@ -256,3 +256,82 @@ func main() {
 ```
 
 ### Buffered channels
+
+```go
+package main
+
+import (
+	"fmt"
+)
+
+func main() {
+	ch := make(chan int, 6)
+
+	go func() {
+		defer close(ch)
+
+		// send all iterator values on channel without blocking
+		for i := range 6 {
+			fmt.Printf("Sending: %d\n", i)
+			ch <- i
+		}
+	}()
+
+	for v := range ch {
+		fmt.Printf("Received: %v\n", v)
+	}
+}
+```
+
+### Channel directions
+
+- Only send or receive
+- Type-safe
+
+```go
+package main
+
+import "fmt"
+
+// Implement relaying of message with Channel Direction
+
+func genMsg(ch chan<- string) {
+	defer close(ch)
+	// send message on ch1
+	ch <- "Ciao Mario"
+}
+
+func relayMsg(in <-chan string, out chan<- string) {
+	defer close(out)
+	// recv message on ch1
+	msg := <-in
+	// send it on ch2
+	out <- msg
+}
+
+func main() {
+	// create ch1 and ch2
+	ch1 := make(chan string)
+	ch2 := make(chan string)
+
+	// spine goroutines genMsg and relayMsg
+	go genMsg(ch1)
+	go relayMsg(ch1, ch2)
+
+	// recv message on ch2
+	v := <-ch2
+	fmt.Println(v)
+}
+```
+
+### Channel ownership
+
+- Default channel value is nil
+- Reading/writing from nil is blocking
+- Closing nil will panic
+- Channel owner is the goroutine that initializes, writes and closes channel
+- Channel user is readonly
+
+```go
+
+```
