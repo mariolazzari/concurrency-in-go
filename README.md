@@ -333,5 +333,147 @@ func main() {
 - Channel user is readonly
 
 ```go
+package main
 
+import "fmt"
+
+func main() {
+	// create channel owner goroutine which return channel and
+	// - writes data into channel and
+	// - closes the channel when done.
+
+	owner := func() <-chan int {
+		ch := make(chan int)
+
+		go func() {
+			defer close(ch)
+			for i := range 6 {
+				ch <- i
+			}
+		}()
+		return ch
+	}
+
+	consumer := func(ch <-chan int) {
+		// read values from channel
+		for v := range ch {
+			fmt.Printf("Received: %d\n", v)
+		}
+		fmt.Println("Done receiving!")
+	}
+
+	ch := owner()
+	consumer(ch)
+}
+```
+
+## Select
+
+### Select
+
+Select is used to wait on multiple channel operations and run the first one that’s ready.
+It’s like a switch, but for channels.
+
+### Select exercise
+
+```go
+package main
+
+import (
+	"fmt"
+	"time"
+)
+
+func main() {
+	ch1 := make(chan string)
+	ch2 := make(chan string)
+
+	go func() {
+		time.Sleep(1 * time.Second)
+		ch1 <- "one"
+	}()
+
+	go func() {
+		time.Sleep(2 * time.Second)
+		ch2 <- "two"
+	}()
+
+	// multiplex recv on channel - ch1, ch2
+	for range 2 {
+		select {
+		case m1 := <-ch1:
+			fmt.Println(m1)
+
+		case m2 := <-ch2:
+			fmt.Println(m2)
+
+		}
+	}
+}
+```
+
+### Select timeout
+
+```go
+package main
+
+import (
+	"fmt"
+	"time"
+)
+
+func main() {
+	ch := make(chan string, 1)
+
+	go func() {
+		time.Sleep(2 * time.Second)
+		ch <- "one"
+	}()
+
+	// implement timeout for recv on channel ch
+	select {
+	case m := <-ch:
+		fmt.Println(m)
+	case <-time.After(3 * time.Second):
+		fmt.Println("timeout")
+	}
+
+}
+```
+
+### Non blocking
+
+```go
+package main
+
+import (
+	"fmt"
+	"time"
+)
+
+func main() {
+	ch := make(chan string)
+
+	go func() {
+		for i := 0; i < 3; i++ {
+			time.Sleep(1 * time.Second)
+			ch <- "message"
+		}
+
+	}()
+
+	// if there is no value on channel, do not block.
+	for range 2 {
+		select {
+		case m := <-ch:
+			fmt.Println(m)
+		default:
+			fmt.Println("No message")
+		}
+
+		// Do some processing..
+		fmt.Println("processing..")
+		time.Sleep(1500 * time.Millisecond)
+	}
+}
 ```
