@@ -90,3 +90,137 @@ func handleConn(c net.Conn) {
 ```
 
 ### WaitGroups
+
+```go
+package main
+
+import (
+	"fmt"
+	"sync"
+)
+
+func main() {
+	var data int
+	var wg sync.WaitGroup
+
+	wg.Go(func() {
+		data++
+	})
+
+	wg.Wait()
+	fmt.Printf("Data is %v\n", data)
+	fmt.Println("Done")
+}
+```
+
+### Closure 1
+
+```go
+package main
+
+import (
+	"fmt"
+	"sync"
+)
+
+func main() {
+	var wg sync.WaitGroup
+
+	incr := func(wg *sync.WaitGroup) {
+		var i int
+		wg.Go(func() {
+			i++
+			fmt.Printf("value of i: %v\n", i)
+		})
+		fmt.Println("return from function")
+	}
+
+	incr(&wg)
+	wg.Wait()
+	fmt.Println("done..")
+}
+```
+
+### Closure 2
+
+```go
+package main
+
+import (
+	"fmt"
+	"sync"
+)
+
+func main() {
+	var wg sync.WaitGroup
+
+	for i := 1; i <= 3; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			fmt.Println(i)
+		}(i)
+	}
+	wg.Wait()
+}
+```
+
+## Go scheduler
+
+### Go scheduler
+
+- M:N scheduler
+- User space
+- OS threads
+- GOMAXPROCS (cpu processors by default)
+- Multiple worker threads
+- N threads on M processors
+- Async preemption
+- Max 10ms
+
+#### Goroutines states
+
+- Runnable
+- Executing
+- Waiting (I/O)
+
+### Context switching
+
+- I/O call
+- Thread moved to waiting queue
+
+### Work stealing
+
+Balance work load across processors
+
+## Channels
+
+### Channels
+
+- Communicate data between goroutines
+- Synchronize goroutines
+- Typed
+- Thread-safe
+- Pointer operator
+- Blocking
+
+### Channel exercise
+
+```go
+package main
+
+import "fmt"
+
+func main() {
+	ch := make(chan int)
+
+	go func(a, b int) {
+		c := a + b
+		ch <- c
+	}(1, 2)
+
+	// get the value computed from goroutine
+	c := <-ch
+	fmt.Printf("computed value %v\n", c)
+}
+```
