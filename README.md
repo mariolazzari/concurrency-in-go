@@ -91,6 +91,8 @@ func handleConn(c net.Conn) {
 
 ### WaitGroups
 
+Race condition: execution order not guaranteed
+
 ```go
 package main
 
@@ -477,3 +479,7 @@ func main() {
 	}
 }
 ```
+
+## Sync package
+
+### Mutex
