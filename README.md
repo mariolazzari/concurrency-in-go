@@ -259,6 +259,10 @@ func main() {
 
 ### Buffered channels
 
+- given capacity
+- in memory FIFO queue
+- Async
+
 ```go
 package main
 
@@ -483,3 +487,113 @@ func main() {
 ## Sync package
 
 ### Mutex
+
+- Channels:
+  - passing copy of data
+  - distributing units of work
+  - communicating async results
+- Mutex
+  - caches
+  - states
+  - protects shared resources
+  - provides exclusive access
+
+### Exercise: mutex
+
+```go
+package main
+
+import (
+	"fmt"
+	"runtime"
+	"sync"
+)
+
+func main() {
+
+	runtime.GOMAXPROCS(4)
+
+	var balance int
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+
+	deposit := func(amount int) {
+		mu.Lock()
+		defer mu.Unlock()
+		balance += amount
+
+	}
+
+	withdrawal := func(amount int) {
+		mu.Lock()
+		defer mu.Unlock()
+		balance -= amount
+	}
+
+	// make 100 deposits of $1
+	// and 100 withdrawal of $1 concurrently.
+	// run the program and check result.
+
+	// TODO: fix the issue for consistent output.
+
+	wg.Add(100)
+	for range 100 {
+		go func() {
+			defer wg.Done()
+			deposit(1)
+		}()
+	}
+
+	wg.Add(100)
+	for range 100 {
+		go func() {
+			defer wg.Done()
+			withdrawal(1)
+		}()
+	}
+
+	wg.Wait()
+	fmt.Println(balance)
+}
+```
+
+### Atomic
+
+- low level operations in memory
+- lockless operation
+- counters
+
+### Exercise: atomic
+
+```go
+package main
+
+import (
+	"fmt"
+	"runtime"
+	"sync"
+	"sync/atomic"
+)
+
+func main() {
+	runtime.GOMAXPROCS(4)
+
+	var counter uint64
+	var wg sync.WaitGroup
+
+	// implement concurrency safe counter
+
+	for range 50 {
+		wg.Go(func() {
+			for range 1000 {
+				// counter++
+				atomic.AddUint64(&counter, 1)
+			}
+		})
+	}
+	wg.Wait()
+	fmt.Println("counter: ", counter)
+}
+```
+
+### Conditional variable
