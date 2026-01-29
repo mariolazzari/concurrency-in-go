@@ -597,3 +597,185 @@ func main() {
 ```
 
 ### Conditional variable
+
+- sync mechanism
+- goroutines container
+- wait suspends execution of a goroutine
+- signal wakes one goroutine
+- broadcast wakes up all go routines
+
+### Exercise: signal
+
+```go
+package main
+
+import (
+	"fmt"
+	"sync"
+	"time"
+)
+
+var sharedRsc = make(map[string]any)
+
+func main() {
+	var wg sync.WaitGroup
+	mu := sync.Mutex{}
+	c := sync.NewCond(&mu)
+
+	wg.Go(func() {
+
+		// suspend goroutine until sharedRsc is populated.
+		c.L.Lock()
+
+		for len(sharedRsc) == 0 {
+			time.Sleep(1 * time.Millisecond)
+		}
+
+		fmt.Println(sharedRsc["rsc1"])
+		c.L.Unlock()
+	})
+
+	c.L.Lock()
+	// writes changes to sharedRsc
+	sharedRsc["rsc1"] = "foo"
+	c.Signal()
+	c.L.Unlock()
+
+	wg.Wait()
+}
+```
+
+### Exercise: broadcast
+
+```go
+package main
+
+import (
+	"fmt"
+	"sync"
+)
+
+var sharedRsc = make(map[string]interface{})
+
+func main() {
+	var wg sync.WaitGroup
+	mu := sync.Mutex{}
+	c := sync.NewCond(&mu)
+
+	wg.Go(func() {
+
+		// suspend goroutine until sharedRsc is populated.
+		c.L.Lock()
+
+		for len(sharedRsc) == 0 {
+			c.L.Lock()
+		}
+
+		fmt.Println(sharedRsc["rsc1"])
+		c.L.Unlock()
+	})
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+		// suspend goroutine until sharedRsc is populated.
+		c.L.Lock()
+
+		for len(sharedRsc) == 0 {
+			c.Wait()
+		}
+
+		fmt.Println(sharedRsc["rsc2"])
+		c.L.Unlock()
+	}()
+
+	c.L.Lock()
+	// writes changes to sharedRsc
+	sharedRsc["rsc1"] = "foo"
+	sharedRsc["rsc2"] = "bar"
+	c.Broadcast()
+	c.L.Unlock()
+
+	wg.Wait()
+}
+```
+
+### Sync once
+
+- one time init function
+
+```go
+package main
+
+import (
+	"fmt"
+	"sync"
+)
+
+func main() {
+	var wg sync.WaitGroup
+	var once sync.Once
+
+	load := func() {
+		fmt.Println("Run only once initialization function")
+	}
+
+	for range 10 {
+		go func() {
+			defer wg.Done()
+
+			// modify so that load function gets called only once.
+			once.Do(load)
+		}()
+	}
+	wg.Wait()
+}
+```
+
+### Sync pool
+
+- pool for expensive resources
+
+### Exercise: pool
+
+```go
+package main
+
+import (
+	"bytes"
+	"fmt"
+	"io"
+	"os"
+	"sync"
+	"time"
+)
+
+// create pool of bytes.Buffers which can be reused.
+var bufPool = sync.Pool{
+	New: func() any {
+		fmt.Println("Allocating new buffer")
+		return new(bytes.Buffer)
+	},
+}
+
+func log(w io.Writer, val string) {
+	b := bufPool.Get().(*bytes.Buffer)
+	b.Reset()
+
+	b.WriteString(time.Now().Format("15:04:05"))
+	b.WriteString(" : ")
+	b.WriteString(val)
+	b.WriteString("\n")
+
+	w.Write(b.Bytes())
+	bufPool.Put(b)
+}
+
+func main() {
+	log(os.Stdout, "debug-string1")
+	log(os.Stdout, "debug-string2")
+}
+```
+
+## Race detector
