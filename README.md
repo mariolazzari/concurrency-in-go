@@ -823,3 +823,311 @@ func randomDuration() time.Duration {
 ```
 
 ### Web crawler
+
+```go
+package main
+
+import (
+	"fmt"
+	"net/http"
+	"time"
+
+	"golang.org/x/net/html"
+)
+
+var fetched map[string]bool
+
+type result struct {
+	url   string
+	urls  []string
+	err   error
+	depth int
+}
+
+// Crawl uses findLinks to recursively crawl
+// pages starting with url, to a maximum of depth.
+func Crawl(url string, depth int) {
+	results := make(chan *result)
+
+	fetch := func(url string, depth int) {
+		urls, err := findLinks(url)
+		results <- &result{url, urls, err, depth}
+	}
+
+	go fetch(url, depth)
+	fetched[url] = true
+
+	for fetching := 1; fetching > 0; fetching-- {
+		res := <-results
+		if res.err != nil {
+			// fmt.Println(res.err)
+			continue
+		}
+
+		fmt.Printf("found: %s\n", res.url)
+		if res.depth > 0 {
+			for _, u := range res.urls {
+				if !fetched[u] {
+					fetching++
+					go fetch(u, res.depth-1)
+					fetched[u] = true
+				}
+			}
+		}
+	}
+	close(results)
+}
+
+func main() {
+	fetched = make(map[string]bool)
+	now := time.Now()
+	Crawl("http://andcloud.io", 2)
+	fmt.Println("time taken:", time.Since(now))
+}
+
+func findLinks(url string) ([]string, error) {
+	resp, err := http.Get(url)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		resp.Body.Close()
+		return nil, fmt.Errorf("getting %s: %s", url, resp.Status)
+	}
+	doc, err := html.Parse(resp.Body)
+	resp.Body.Close()
+	if err != nil {
+		return nil, fmt.Errorf("parsing %s as HTML: %v", url, err)
+	}
+	return visit(nil, doc), nil
+}
+
+// visit appends to links each link found in n, and returns the result.
+func visit(links []string, n *html.Node) []string {
+	if n.Type == html.ElementNode && n.Data == "a" {
+		for _, a := range n.Attr {
+			if a.Key == "href" {
+				links = append(links, a.Val)
+			}
+		}
+	}
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		links = visit(links, c)
+	}
+	return links
+}
+```
+
+## Concurrency patterns
+
+### Pipelines
+
+- process streams
+- more stages
+- concurrent stages
+- same type
+- composable
+
+### Exercise: pipelines
+
+```go
+package main
+
+import "fmt"
+
+func generator(nums ...int) <-chan int {
+	out := make(chan int)
+
+	go func() {
+		for _, n := range nums {
+			out <- n
+		}
+		close(out)
+	}()
+	return out
+}
+
+func square(in <-chan int) <-chan int {
+	out := make(chan int)
+	go func() {
+		for n := range in {
+			out <- n * n
+		}
+		close(out)
+	}()
+	return out
+}
+
+func main() {
+	// set up the pipeline
+	for n := range square(square(generator(2, 3))) {
+		fmt.Println(n)
+	}
+}
+```
+
+### Fan out, fan in
+
+- Brakes cpu intensive stage into more goroutines
+- fan out: multiple goroutines read from single chanel
+- fan in: comining multiple results to a signle channel
+
+### Exercise: fan out, fan in
+
+```go
+// Squaring numbers.
+
+package main
+
+import (
+	"fmt"
+	"sync"
+)
+
+func generator(nums ...int) <-chan int {
+	out := make(chan int)
+	go func() {
+		for _, n := range nums {
+			out <- n
+		}
+		close(out)
+	}()
+	return out
+}
+
+func square(in <-chan int) <-chan int {
+	out := make(chan int)
+	go func() {
+		for n := range in {
+			out <- n * n
+		}
+		close(out)
+	}()
+	return out
+}
+
+func merge(cs ...<-chan int) <-chan int {
+	out := make(chan int)
+	var wg sync.WaitGroup
+
+	output := func(c <-chan int) {
+		for n := range c {
+			out <- n
+		}
+		wg.Done()
+	}
+
+	wg.Add(len(cs))
+	for _, c := range cs {
+		go output(c)
+	}
+
+	go func() {
+		wg.Wait()
+		close(out)
+	}()
+	return out
+}
+
+func main() {
+	in := generator(2, 3)
+
+	c1 := square(in)
+	c2 := square(in)
+
+	for n := range merge(c1, c2) {
+		fmt.Println(n)
+	}
+}
+```
+
+### Cancelling goroutines
+
+- upstreams close channels
+- downstreams receave until channel is close
+
+### Exercise: cancelling goroutines
+
+```go
+// Squaring numbers.
+
+package main
+
+import (
+	"fmt"
+	"sync"
+)
+
+func generator(done <-chan struct{}, nums ...int) <-chan int {
+	out := make(chan int)
+
+	go func() {
+		defer close(out)
+		for _, n := range nums {
+			select {
+			case out <- n:
+			case <-done:
+				return
+			}
+		}
+
+	}()
+	return out
+}
+
+func square(done <-chan struct{}, in <-chan int) <-chan int {
+	out := make(chan int)
+	go func() {
+		defer close(out)
+		for n := range in {
+			select {
+			case out <- n * n:
+			case <-done:
+				return
+			}
+		}
+	}()
+	return out
+}
+
+func merge(done <-chan struct{}, cs ...<-chan int) <-chan int {
+	out := make(chan int)
+	var wg sync.WaitGroup
+
+	output := func(c <-chan int) {
+		defer wg.Done()
+		for n := range c {
+			select {
+			case out <- n:
+			case <-done:
+				return
+			}
+		}
+	}
+
+	wg.Add(len(cs))
+	for _, c := range cs {
+		go output(c)
+	}
+
+	go func() {
+		wg.Wait()
+		close(out)
+	}()
+	return out
+}
+
+func main() {
+	done := make(chan struct{})
+	defer close(done)
+
+	in := generator(done, 2, 3)
+
+	c1 := square(done, in)
+	c2 := square(done, in)
+
+	out := merge(done, c1, c2)
+
+	fmt.Println(<-out)
+}
+```
