@@ -1344,4 +1344,60 @@ func getFileContentType(file string) (string, error) {
 
 ### Cancellation
 
+- context is immutable
+- add cancellation
+  - withCancel
+  - withTimeout
+  - withDeadline
+- cancel closes chanel and releases its resources
+- withTimeout is a wrapper over withDeadline
+
 ### Data bag
+
+- transport request data
+- WithValue associates a value to a context
+- ctx.Value extrcts value passed
+
+### Exercise: withCancel
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+)
+
+func main() {
+	generator := func(c context.Context) <-chan int {
+		ch := make(chan int)
+		n := 1
+
+		go func() {
+			defer close(ch)
+
+			for {
+				select {
+				case ch <- n:
+				case <-c.Done():
+					return
+				}
+				n++
+			}
+		}()
+
+		return ch
+	}
+
+	// Create a context that is cancellable.
+	ctx, cancel := context.WithCancel(context.Background())
+
+	ch := generator(ctx)
+	for n := range ch {
+		fmt.Println(n)
+		if n == 5 {
+			cancel()
+		}
+	}
+}
+```
