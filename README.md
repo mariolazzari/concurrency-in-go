@@ -1457,3 +1457,105 @@ func main() {
 	}
 }
 ```
+
+### Exercise: withTimeout
+
+```go
+package main
+
+import (
+	"context"
+	"io"
+	"log"
+	"net/http"
+	"os"
+	"time"
+)
+
+func main() {
+
+	req, err := http.NewRequest("GET", "https://andcloud.io", nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// set a http client timeout
+	ctx, cancel := context.WithTimeout(req.Context(), 1*time.Second)
+	defer cancel()
+
+	req = req.WithContext(ctx)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		log.Println("ERROR:", err)
+		return
+	}
+
+	// Close the response body on the return.
+	defer resp.Body.Close()
+
+	// Write the response to stdout.
+	io.Copy(os.Stdout, resp.Body)
+}
+```
+
+### Exercise: withValue
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+)
+
+type database map[string]bool
+type userIDKeyType string
+
+var db database = database{
+	"jane": true,
+}
+
+func main() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	processRequest(ctx, "jane")
+}
+
+func processRequest(ctx context.Context, userid string) {
+	// send userID information to checkMemberShip through context for
+
+	// map lookup.
+	val := context.WithValue(ctx, userIDKeyType("userIDKey"), "jane")
+	ch := checkMemberShip(val)
+	status := <-ch
+	fmt.Printf("membership status of userid : %s : %v\n", userid, status)
+}
+
+// checkMemberShip - takes context as input.
+// extracts the user id information from context.
+// spins a goroutine to do map lookup
+// sends the result on the returned channel.
+func checkMemberShip(ctx context.Context) <-chan bool {
+	ch := make(chan bool)
+	go func() {
+		defer close(ch)
+		// do some database lookup
+		userid := ctx.Value(userIDKeyType("userIDKey")).(string)
+		status := db[userid]
+		ch <- status
+	}()
+	return ch
+}
+```
+
+### Go idioms for context
+
+- Incoming request to a server should create a context
+- Create context early
+- Outgoing calls to a server should accept a contxt
+- Pass context to any IO operations as first parameter
+- All derived contexts are cancelled on context cancel
+
+## HTTP server timeouts
