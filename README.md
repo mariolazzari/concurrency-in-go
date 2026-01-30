@@ -1318,3 +1318,30 @@ func getFileContentType(file string) (string, error) {
 	return contentType, nil
 }
 ```
+
+## Context package
+
+### Context
+
+- propagate request scope
+- propagate cancellation signal
+
+#### Background
+
+- empty context
+- root of context tree
+- never cancelled
+- no values
+- no deadline
+- used by main function
+- top level of incoming request
+
+#### Todo
+
+- root of context tree
+- placeholder
+-
+
+### Cancellation
+
+### Data bag
